@@ -5,40 +5,98 @@
  */
 package io.jooby.validation;
 
-import java.util.Arrays;
-import java.util.Collection;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.util.List;
 import java.util.Map;
 
 import io.jooby.Context;
+import io.jooby.Route;
+import io.jooby.SneakyThrows;
 
 /**
  * This class is a helper that provides a single entry point for bean validation without being
  * strictly tied to a specific bean validation implementation. Initially, it is utilized in
  * `jooby-apt` for MVC bean validation, but it can also be used independently in the scripting API.
- * It relies on an implementation of {@link MvcValidator} that should be available in the service
- * registry
+ * It relies on an implementation of {@link BeanValidator} that should be available in the service
+ * registry. For an example implementation, refer to the HibernateValidatorModule.
+ *
+ * @author kliushnichenko
+ * @since 3.3.1
  */
-public final class BeanValidator {
+public interface BeanValidator {
 
-  private BeanValidator() {}
+  /**
+   * Method should validate the bean and throw an exception if any constraint violations are
+   * detected
+   *
+   * @param bean bean to be validated
+   * @param ctx request context
+   * @throws RuntimeException an exception with violations to be thrown (e.g.
+   *     ConstraintViolationException)
+   */
+  void validate(Context ctx, Object bean) throws RuntimeException;
 
-  public static <T> T validate(Context ctx, T bean) {
-    MvcValidator validator = ctx.require(MvcValidator.class);
-
-    if (bean instanceof Collection<?>) {
-      validateCollection(validator, ctx, (Collection<?>) bean);
-    } else if (bean.getClass().isArray()) {
-      validateCollection(validator, ctx, Arrays.asList((Object[]) bean));
-    } else if (bean instanceof Map<?, ?>) {
-      validateCollection(validator, ctx, ((Map<?, ?>) bean).values());
-    } else {
-      validator.validate(ctx, bean);
+  /**
+   * Validate a value bean. Any non-null value is validated.
+   *
+   * @param ctx HTTP context
+   * @param bean bean instance.
+   * @return Bean instance.
+   * @param <T> Bean type.
+   */
+  static <T> T apply(Context ctx, T bean) {
+    if (bean != null) {
+      var validator = ctx.require(BeanValidator.class);
+      if (bean instanceof Iterable<?> values) {
+        validateIterable(validator, ctx, values);
+      } else if (bean.getClass().isArray()) {
+        validateIterable(validator, ctx, List.of((Object[]) bean));
+      } else if (bean instanceof Map<?, ?> map) {
+        validateIterable(validator, ctx, map.values());
+      } else {
+        validator.validate(ctx, bean);
+      }
     }
-
     return bean;
   }
 
-  private static void validateCollection(MvcValidator validator, Context ctx, Collection<?> beans) {
+  static Route.Filter validate() {
+    return BeanValidator::validate;
+  }
+
+  static Route.Handler validate(Route.Handler next) {
+    return ctx -> {
+      try {
+        return next.apply(new ValidationContext(ctx));
+      } catch (UndeclaredThrowableException | InvocationTargetException e) {
+        // unwrap reflective exception
+        throw SneakyThrows.propagate(getRootCause(e));
+      }
+    };
+  }
+
+  private static Throwable getRootCause(Throwable throwable) {
+    Throwable slowPointer = throwable;
+
+    Throwable cause;
+    for (boolean advanceSlowPointer = false;
+        (cause = throwable.getCause()) != null;
+        advanceSlowPointer = !advanceSlowPointer) {
+      throwable = cause;
+      if (throwable == slowPointer) {
+        throw new IllegalArgumentException("Loop in causal chain detected.", throwable);
+      }
+
+      if (advanceSlowPointer) {
+        slowPointer = slowPointer.getCause();
+      }
+    }
+
+    return throwable;
+  }
+
+  private static void validateIterable(BeanValidator validator, Context ctx, Iterable<?> beans) {
     for (var item : beans) {
       validator.validate(ctx, item);
     }
