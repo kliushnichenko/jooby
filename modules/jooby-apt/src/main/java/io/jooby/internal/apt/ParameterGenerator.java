@@ -53,8 +53,8 @@ public enum ParameterGenerator {
       }
     }
   },
-  CookieParam("cookie", "io.jooby.annotation.CookieParam", "jakarta.ws.rs.CookieParam"),
-  FlashParam("flash", "io.jooby.annotation.FlashParam"),
+  CookieParam("cookie", Types.BUILT_IN, "io.jooby.annotation.CookieParam", "jakarta.ws.rs.CookieParam"),
+  FlashParam("flash", Types.BUILT_IN,"io.jooby.annotation.FlashParam"),
   FormParam("form", "io.jooby.annotation.FormParam", "jakarta.ws.rs.FormParam"),
   HeaderParam("header", "io.jooby.annotation.HeaderParam", "jakarta.ws.rs.HeaderParam"),
   Lookup("lookup", "io.jooby.annotation.Param") {
@@ -65,7 +65,7 @@ public enum ParameterGenerator {
   },
   PathParam("path", "io.jooby.annotation.PathParam", "jakarta.ws.rs.PathParam"),
   QueryParam("query", "io.jooby.annotation.QueryParam", "jakarta.ws.rs.QueryParam"),
-  SessionParam("session", "io.jooby.annotation.SessionParam"),
+  SessionParam("session", Types.BUILT_IN,"io.jooby.annotation.SessionParam"),
   BodyParam("body") {
     @Override
     public String parameterName(AnnotationMirror annotation, String defaultParameterName) {
@@ -224,7 +224,7 @@ public enum ParameterGenerator {
                     var convertMethod = nullable ? "toNullable" : "to";
                     return Map.entry(convertMethod, type);
                   });
-      if (paramSource.isEmpty() && BUILT_IN.stream().noneMatch(it -> toValue.getValue().is(it))) {
+      if (paramSource.isEmpty() && Types.BUILT_IN.stream().noneMatch(it -> toValue.getValue().is(it))) {
         // for unsupported types, we check if node with matching name is present, if not we fallback
         // to entire scope converter
         if (kt) {
@@ -317,7 +317,7 @@ public enum ParameterGenerator {
 
   protected String builtinType(
       boolean kt, AnnotationMirror annotation, TypeDefinition type, String name, boolean nullable) {
-    if (BUILT_IN.stream().anyMatch(type::is)) {
+    if (Types.BUILT_IN.stream().anyMatch(type::is)) {
       var paramSource = source(annotation);
       // look at named parameter
       if (type.isPrimitive()) {
@@ -368,6 +368,11 @@ public enum ParameterGenerator {
     this.annotations = Set.of(annotations);
   }
 
+  ParameterGenerator(String method, Set<String> supportedTypesRestriction, String... annotations) {
+    this(method, annotations);
+    this.supportedTypesRestriction = supportedTypesRestriction;
+  }
+
   protected String source(AnnotationMirror annotation) {
     if (ParameterGenerator.Lookup.annotations.contains(annotation.getAnnotationType().toString())) {
       var sources = findAnnotationValue(annotation, AnnotationSupport.VALUE);
@@ -380,42 +385,19 @@ public enum ParameterGenerator {
     return "";
   }
 
+  public void verifyType(String type, String parameterName) {
+    if (!supportedTypesRestriction.isEmpty()) {
+      if (supportedTypesRestriction.stream().noneMatch(type::equals)) {
+        throw new IllegalArgumentException("""
+            Unsupported argument type. Parameter '%s' annotated as '%s' cannot be of a type '%s'.
+            Supported types are: %s
+            """.formatted(parameterName, annotations, type, Types.BUILT_IN));
+      }
+    }
+  }
+
   protected final String method;
   private final Set<String> annotations;
+  private Set<String> supportedTypesRestriction = Set.of(); // no restrictions by default
   private static final Set<Class> CONTAINER = Set.of(List.class, Set.class, Optional.class);
-  private static final Set<String> BUILT_IN =
-      Set.of(
-          String.class.getName(),
-          Boolean.class.getName(),
-          Boolean.TYPE.getName(),
-          Byte.class.getName(),
-          Byte.TYPE.getName(),
-          Character.class.getName(),
-          Character.TYPE.getName(),
-          Short.class.getName(),
-          Short.TYPE.getName(),
-          Integer.class.getName(),
-          Integer.TYPE.getName(),
-          Long.class.getName(),
-          Long.TYPE.getName(),
-          Float.class.getName(),
-          Float.TYPE.getName(),
-          Double.class.getName(),
-          Double.TYPE.getName(),
-          Enum.class.getName(),
-          java.util.UUID.class.getName(),
-          java.time.Instant.class.getName(),
-          java.util.Date.class.getName(),
-          java.time.LocalDate.class.getName(),
-          java.time.LocalDateTime.class.getName(),
-          java.math.BigDecimal.class.getName(),
-          java.math.BigInteger.class.getName(),
-          Duration.class.getName(),
-          Period.class.getName(),
-          java.nio.charset.Charset.class.getName(),
-          "io.jooby.StatusCode",
-          TimeZone.class.getName(),
-          ZoneId.class.getName(),
-          URI.class.getName(),
-          URL.class.getName());
 }

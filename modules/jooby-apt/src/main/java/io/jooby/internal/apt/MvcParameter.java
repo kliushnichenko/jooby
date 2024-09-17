@@ -5,17 +5,16 @@
  */
 package io.jooby.internal.apt;
 
-import static io.jooby.internal.apt.AnnotationSupport.NON_NULL;
-import static io.jooby.internal.apt.AnnotationSupport.NULLABLE;
-
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.VariableElement;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.VariableElement;
+import static io.jooby.internal.apt.AnnotationSupport.NON_NULL;
+import static io.jooby.internal.apt.AnnotationSupport.NULLABLE;
 
 public class MvcParameter {
   private final MvcRoute route;
@@ -59,7 +58,7 @@ public class MvcParameter {
     // keep kotlin.coroutines.Continuation as main type
     var parameterType = elementType.toString();
     return switch (parameterType) {
-        /* Type Injection: */
+      /* Type Injection: */
       case "io.jooby.Context" -> CodeBlock.of("ctx");
       case "io.jooby.QueryString" -> {
         if (type.is(Optional.class)) {
@@ -100,11 +99,10 @@ public class MvcParameter {
           yield ParameterGenerator.BodyParam.toSourceCode(
               kt, route, null, type, parameterName, isNullable(kt));
         } else {
-          yield strategy
-              .get()
-              .getKey()
-              .toSourceCode(
-                  kt, route, strategy.get().getValue(), type, parameterName, isNullable(kt));
+          var paramGenerator = strategy.get().getKey();
+          paramGenerator.verifyType(parameterType, parameterName);
+          yield paramGenerator.toSourceCode(
+              kt, route, strategy.get().getValue(), type, parameterName, isNullable(kt));
         }
       }
     };
