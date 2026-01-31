@@ -9,7 +9,11 @@ import io.jooby.output.BufferedOutput;
 import io.jooby.output.OutputFactory;
 import io.jooby.output.OutputOptions;
 import org.openjdk.jmh.annotations.*;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.core.util.JsonRecyclerPools;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +34,13 @@ public class JacksonBench {
   @Setup
   public void setup() {
     message = Map.of("id", 98, "value", "Hello World");
-    mapper = new ObjectMapper();
+//    mapper = new ObjectMapper();
+    JsonFactory jsonFactory = JsonFactory.builder()
+        .recyclerPool(JsonRecyclerPools.threadLocalPool())
+        .build();
+    mapper = JsonMapper.builder(jsonFactory)
+        .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+        .build();
     factory = OutputFactory.create(OutputOptions.small());
   }
 
