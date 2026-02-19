@@ -5,6 +5,16 @@
  */
 package io.jooby.jackson3;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
+import io.jooby.*;
+import io.jooby.output.Output;
+import tools.jackson.core.exc.StreamReadException;
+import tools.jackson.databind.JacksonModule;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.type.TypeFactory;
+
 import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.HashMap;
@@ -12,24 +22,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
-
-import tools.jackson.core.exc.StreamReadException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.JacksonModule;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.type.TypeFactory;
-import edu.umd.cs.findbugs.annotations.NonNull;
-import io.jooby.Body;
-import io.jooby.Context;
-import io.jooby.Extension;
-import io.jooby.Jooby;
-import io.jooby.MediaType;
-import io.jooby.MessageDecoder;
-import io.jooby.MessageEncoder;
-import io.jooby.ServiceRegistry;
-import io.jooby.StatusCode;
-import io.jooby.output.Output;
 
 /**
  * JSON module using Jackson3: https://jooby.io/modules/jackson3.
@@ -55,7 +47,7 @@ import io.jooby.output.Output;
  *   });
  * }
  * }</pre>
- *
+ * <p>
  * For body decoding the client must specify the <code>Content-Type</code> header set to <code>
  * application/json</code>.
  *
@@ -90,7 +82,7 @@ public class Jackson3Module implements Extension, MessageDecoder, MessageEncoder
   /**
    * Creates a Jackson module.
    *
-   * @param mapper Object mapper to use.
+   * @param mapper      Object mapper to use.
    * @param contentType Content type.
    */
   public Jackson3Module(@NonNull ObjectMapper mapper, @NonNull MediaType contentType) {
@@ -108,7 +100,9 @@ public class Jackson3Module implements Extension, MessageDecoder, MessageEncoder
     this(mapper, defaultTypes.getOrDefault(mapper.getClass().getSimpleName(), MediaType.json));
   }
 
-  /** Creates a Jackson module using the default object mapper from {@link #create(JacksonModule...)}. */
+  /**
+   * Creates a Jackson module using the default object mapper from {@link #create(JacksonModule...)}.
+   */
   public Jackson3Module() {
     this(create());
   }
@@ -126,6 +120,7 @@ public class Jackson3Module implements Extension, MessageDecoder, MessageEncoder
   }
 
   @Override
+  @SuppressWarnings({"rawtypes", "unchecked"})
   public void install(@NonNull Jooby application) {
     application.decoder(mediaType, this);
     application.encoder(mediaType, this);
@@ -141,15 +136,18 @@ public class Jackson3Module implements Extension, MessageDecoder, MessageEncoder
     application.onStarting(() -> onStarting(application, services, mapperType));
   }
 
+  @SuppressWarnings({"rawtypes", "unchecked"})
   private void onStarting(Jooby application, ServiceRegistry services, Class mapperType) {
-    var builder = mapper.rebuild();
-    for (Class<? extends JacksonModule> type : modules) {
-      JacksonModule module = application.require(type);
-      builder.addModule(module);
+    if (!modules.isEmpty()) {
+      var builder = mapper.rebuild();
+      for (Class<? extends JacksonModule> type : modules) {
+        JacksonModule module = application.require(type);
+        builder.addModule(module);
+      }
+      var newMapper = builder.build();
+      services.put(mapperType, newMapper);
+      services.put(ObjectMapper.class, newMapper);
     }
-    var newMapper = builder.build();
-    services.put(mapperType, newMapper);
-    services.put(ObjectMapper.class, newMapper);
   }
 
   @Override
@@ -185,7 +183,7 @@ public class Jackson3Module implements Extension, MessageDecoder, MessageEncoder
    * @return Object mapper instance.
    */
   public static ObjectMapper create(JacksonModule... modules) {
-    JsonMapper.Builder builder =  JsonMapper.builder();
+    JsonMapper.Builder builder = JsonMapper.builder();
 
     Stream.of(modules).forEach(builder::addModule);
 

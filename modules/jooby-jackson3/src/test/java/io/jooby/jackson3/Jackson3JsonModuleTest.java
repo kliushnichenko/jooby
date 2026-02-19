@@ -27,7 +27,7 @@ import io.jooby.output.OutputOptions;
 public class Jackson3JsonModuleTest {
 
   @Test
-  public void renderJson() throws Exception {
+  public void renderJson() {
     Context ctx = mock(Context.class);
     when(ctx.getOutputFactory()).thenReturn(OutputFactory.create(OutputOptions.small()));
 
@@ -56,7 +56,7 @@ public class Jackson3JsonModuleTest {
   }
 
   @Test
-  public void renderXml() throws Exception {
+  public void renderXml() {
     Context ctx = mock(Context.class);
     when(ctx.getOutputFactory()).thenReturn(OutputFactory.create(OutputOptions.small()));
 
